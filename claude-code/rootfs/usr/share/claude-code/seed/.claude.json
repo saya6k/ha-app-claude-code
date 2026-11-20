@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ha": {
+      "type": "http",
+      "url": "http://supervisor/core/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SUPERVISOR_TOKEN}"
+      }
+    }
+  }
+}

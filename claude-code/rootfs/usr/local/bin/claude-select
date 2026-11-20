@@ -1,0 +1,98 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# claude-select [VERSION] — point /usr/local/bin/claude at a Claude Code build.
+#
+#   no VERSION  latest release from the npm registry
+#   VERSION     that exact release (e.g. 2.1.300)
+#
+# Builds are cached in /data/claude-code/<version>/ (excluded from backups),
+# so a restart only downloads when the version changes. Anything that fails
+# — no network, unknown version, checksum mismatch, a binary that won't run —
+# falls back to the last working build, then to the copy bundled in the
+# image. Never exits non-zero: a failed update must not keep the terminal
+# from starting.
+# ==============================================================================
+CACHE=/data/claude-code
+BUNDLED=/opt/claude-code/claude
+BUNDLED_VERSION=$(cat /opt/claude-code/VERSION)
+LINK=/usr/local/bin/claude
+NPM=https://registry.npmjs.org
+
+case "$(apk --print-arch)" in
+    x86_64)  pkg="claude-code-linux-x64-musl" ;;
+    aarch64) pkg="claude-code-linux-arm64-musl" ;;
+esac
+
+use() {  # use BINARY VERSION
+    ln -sfn "$1" "${LINK}"
+    echo "$2" > "${CACHE}/current"
+    bashio::log.info "Claude Code $2 ($1)"
+}
+
+works() {
+    timeout 10 "$1" --version >/dev/null 2>&1
+}
+
+download() {  # download VERSION → ${CACHE}/VERSION/claude
+    local ver=$1 dir="${CACHE}/$1" tmp shasum
+    tmp=$(mktemp -d "${CACHE}/.dl.XXXXXX")
+    shasum=$(curl -fsS --connect-timeout 10 --max-time 30 "${NPM}/@anthropic-ai/${pkg}/${ver}" \
+        | jq -r '.dist.shasum // empty') || shasum=""
+    if [ -z "${shasum}" ]; then
+        bashio::log.warning "Claude Code ${ver} not found on npm (or registry unreachable)"
+    elif ! curl -fsS --connect-timeout 10 --max-time 600 -o "${tmp}/pkg.tgz" \
+            "${NPM}/@anthropic-ai/${pkg}/-/${pkg}-${ver}.tgz"; then
+        bashio::log.warning "Download of Claude Code ${ver} failed"
+    elif [ "$(sha1sum "${tmp}/pkg.tgz" | cut -d' ' -f1)" != "${shasum}" ]; then
+        bashio::log.warning "Claude Code ${ver}: checksum mismatch, discarded"
+    elif tar -xzf "${tmp}/pkg.tgz" -C "${tmp}" package/claude \
+            && works "${tmp}/package/claude"; then
+        rm -rf "${dir}"
+        mkdir -p "${dir}"
+        mv "${tmp}/package/claude" "${dir}/claude"
+        rm -rf "${tmp}"
+        return 0
+    else
+        bashio::log.warning "Claude Code ${ver} does not run in this image, discarded"
+    fi
+    rm -rf "${tmp}"
+    return 1
+}
+
+mkdir -p "${CACHE}"
+want=${1:-}  # bashio runs with `set -u`
+
+if [ -z "${want}" ]; then
+    want=$(curl -fsS --connect-timeout 10 --max-time 20 "${NPM}/@anthropic-ai/claude-code/latest" \
+        | jq -r '.version // empty') || want=""
+    if [ -z "${want}" ]; then
+        want=$(cat "${CACHE}/current" 2>/dev/null)
+        bashio::log.warning "Could not look up the latest Claude Code; keeping ${want:-the bundled build}"
+    fi
+fi
+
+if [ -z "${want}" ] || [ "${want}" = "${BUNDLED_VERSION}" ]; then
+    use "${BUNDLED}" "${BUNDLED_VERSION}"
+elif works "${CACHE}/${want}/claude"; then
+    use "${CACHE}/${want}/claude" "${want}"
+else
+    bashio::log.info "Installing Claude Code ${want}…"
+    if download "${want}"; then
+        use "${CACHE}/${want}/claude" "${want}"
+    else
+        last=$(cat "${CACHE}/current" 2>/dev/null)
+        if [ -n "${last}" ] && [ "${last}" != "${BUNDLED_VERSION}" ] && works "${CACHE}/${last}/claude"; then
+            use "${CACHE}/${last}/claude" "${last}"
+        else
+            use "${BUNDLED}" "${BUNDLED_VERSION}"
+        fi
+    fi
+fi
+
+# Keep only the active build; each one is ~200 MB.
+active=$(cat "${CACHE}/current")
+for dir in "${CACHE}"/*/; do
+    [ "$(basename "${dir}")" = "${active}" ] || rm -rf "${dir}"
+done
+exit 0

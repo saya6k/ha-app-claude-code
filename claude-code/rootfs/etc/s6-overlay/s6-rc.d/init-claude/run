@@ -1,0 +1,48 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# One-time setup before the terminal starts.
+#
+# Persistence layout (see DOCS.md):
+#   /data/home      HOME — shell history, ~/.gitconfig, ~/.ssh (private)
+#   /addon_config   CLAUDE_CONFIG_DIR — .claude.json, .credentials.json,
+#                   settings.json, CLAUDE.md, sessions (user-editable)
+# Both survive restarts and updates and are included in backups.
+# ==============================================================================
+
+mkdir -p "${HOME}" "${CLAUDE_CONFIG_DIR}" \
+    || bashio::exit.nok "Failed to create ${HOME} / ${CLAUDE_CONFIG_DIR}"
+
+# Seed default files that are missing. Existing files are never touched, so
+# user edits (and a deleted file's replacement) always win.
+for seed in /usr/share/claude-code/seed/* /usr/share/claude-code/seed/.[!.]*; do
+    target="${CLAUDE_CONFIG_DIR}/$(basename "${seed}")"
+    [ -e "${target}" ] && continue
+    cp "${seed}" "${target}"
+    bashio::log.info "Created default ${target}"
+done
+# Login tokens: owner-only, like Claude Code itself writes it.
+chmod 600 "${CLAUDE_CONFIG_DIR}/.credentials.json"
+
+# Optional long-lived token from `claude setup-token`. Written into the s6
+# container environment so every with-contenv service (ttyd → tmux → claude)
+# sees it. Never logged.
+token_file=/run/s6/container_environment/CLAUDE_CODE_OAUTH_TOKEN
+rm -f "${token_file}"
+if bashio::config.has_value 'claude_code_oauth_token'; then
+    printf '%s' "$(bashio::config 'claude_code_oauth_token')" > "${token_file}"
+    chmod 600 "${token_file}"
+    bashio::log.info 'Using claude_code_oauth_token from the app configuration'
+elif jq -e '.claudeAiOauth' "${CLAUDE_CONFIG_DIR}/.credentials.json" >/dev/null 2>&1; then
+    bashio::log.info "Using saved login from ${CLAUDE_CONFIG_DIR}/.credentials.json"
+else
+    bashio::log.info 'Not logged in yet — run /login in the terminal'
+fi
+
+# Latest release on every start, or the pinned claude_code_version.
+if bashio::config.has_value 'claude_code_version'; then
+    bashio::log.info "Claude Code pinned to $(bashio::config 'claude_code_version')"
+    claude-select "$(bashio::config 'claude_code_version')"
+else
+    claude-select
+fi

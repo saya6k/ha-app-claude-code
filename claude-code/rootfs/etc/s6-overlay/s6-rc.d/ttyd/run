@@ -1,0 +1,38 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Web terminal on loopback only; nginx owns the ingress port (8099).
+#
+# tmux -A re-attaches to the running session on browser reconnects and HA
+# navigation instead of starting a new Claude each time. When Claude exits
+# the session drops to a login shell; `exit` there ends the session and the
+# next visit starts a fresh one.
+# ==============================================================================
+claude_cmd='claude'
+
+if bashio::config.true 'enable_remote_control'; then
+    # Fixed name: the default would be the container hostname (opaque hex).
+    claude_cmd="claude --remote-control 'Home Assistant'"
+    if bashio::config.has_value 'claude_code_oauth_token'; then
+        bashio::log.warning 'Remote Control needs a full /login; the claude_code_oauth_token from `claude setup-token` cannot establish it.'
+    fi
+
+    # ttyd only spawns its command when a browser connects, so start the
+    # session now — otherwise Remote Control stays down after every restart
+    # until someone opens the panel. ttyd's `new-session -A` attaches to it.
+    # TERM matches what ttyd advertises. Skipped if the session survived a
+    # restart of this service.
+    if ! tmux has-session -t claude 2>/dev/null; then
+        TERM=xterm-256color tmux new-session -d -s claude -x 200 -y 50 -c /config "${claude_cmd}; exec bash -l" \
+            && bashio::log.info "Remote Control enabled: session 'Home Assistant' started" \
+            || bashio::log.warning 'Could not pre-start the session; it starts on the first panel visit'
+    fi
+fi
+
+exec ttyd \
+    --port 7681 \
+    --interface lo \
+    --writable \
+    --ping-interval 30 \
+    --client-option fontSize=14 \
+    tmux new-session -A -s claude -c /config "${claude_cmd}; exec bash -l"

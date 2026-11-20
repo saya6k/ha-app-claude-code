@@ -1,0 +1,30 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# login-url-watcher finish handler.
+#
+# s6-supervise restarts the service ONLY when finish exits 0.
+# - Killed by signal / clean exit → halt the container (stop or shutdown).
+# - Non-zero exit → exit 0 so s6 restarts login-url-watcher; the tmux session (and the
+#   Claude process inside it) survives a restart of this service.
+# ==============================================================================
+# shellcheck disable=SC2155
+readonly exit_code_container=$(</run/s6-linux-init-container-results/exitcode)
+readonly exit_code_service="${1}"
+readonly exit_code_signal="${2}"
+
+bashio::log.info \
+  "login-url-watcher exited with code ${exit_code_service}" \
+  "(by signal ${exit_code_signal})"
+
+if [[ "${exit_code_signal}" -ne 0 ]]; then
+  if [[ "${exit_code_container}" -eq 0 ]]; then
+    echo $((128 + exit_code_signal)) > /run/s6-linux-init-container-results/exitcode
+  fi
+  exec /run/s6/basedir/bin/halt
+elif [[ "${exit_code_service}" -eq 0 ]]; then
+  exec /run/s6/basedir/bin/halt
+else
+  bashio::log.warning "login-url-watcher: crashed with exit ${exit_code_service} — restarting"
+  exit 0
+fi

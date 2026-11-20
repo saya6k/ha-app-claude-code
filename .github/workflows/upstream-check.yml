@@ -1,0 +1,46 @@
+---
+name: Upstream check
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check npm @anthropic-ai/claude-code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check npm version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -sf https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r .version)
+          CURRENT=$(grep '^ARG CLAUDE_CODE_VERSION=' claude-code/Dockerfile | cut -d= -f2)
+          echo "Latest : $LATEST"
+          echo "Current: $CURRENT"
+          [ "$LATEST" = "$CURRENT" ] && echo "Up to date." && exit 0
+
+          gh pr list --head "upstream/claude-code-${LATEST}" --json number --jq 'length' \
+            | grep -qv '^0$' && echo "PR already open." && exit 0
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -c "upstream/claude-code-${LATEST}"
+          sed -i "s|^ARG CLAUDE_CODE_VERSION=.*|ARG CLAUDE_CODE_VERSION=${LATEST}|" claude-code/Dockerfile
+          git add claude-code/Dockerfile
+          git commit -m "chore: bump claude-code ${CURRENT} → ${LATEST}"
+          git push origin "upstream/claude-code-${LATEST}"
+          gh pr create \
+            --base main --head "upstream/claude-code-${LATEST}" \
+            --title "chore: bump claude-code ${CURRENT} → ${LATEST}" \
+            --body "$(printf '## npm update\n\n[@anthropic-ai/claude-code %s](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/%s) released.' "${LATEST}" "${LATEST}")" \
+            --assignee saya6k

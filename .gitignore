@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# macOS
+.DS_Store
+
+# Agent scaffolding (AGENTS.md, .agents/, .claude/, .gemini/, and the
+# CLAUDE.md / GEMINI.md symlinks) is per-developer tooling, not repo content.
+# It stays on disk locally and is never tracked.
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.claude/
+.gemini/
+# ...except the CLAUDE.md the app seeds into /addon_config, which is content.
+!claude-code/rootfs/usr/share/claude-code/seed/CLAUDE.md

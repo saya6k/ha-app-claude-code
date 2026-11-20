@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# login-url-watcher — polls the `claude` tmux pane for Claude Code's OAuth
+# login URL and posts it as a clickable Home Assistant persistent
+# notification.
+#
+# Why: copying the ~450-char login URL out of the browser terminal is
+# unreliable — Claude Code hard-wraps it across lines, and tmux + OSC 52
+# clipboard relays truncate or drop it. Adapted from heytcass/claude-terminal.
+
+NOTIFICATION_ID="claude_code_login_url"
+POLL_INTERVAL=3
+
+extract_url() {
+    tmux capture-pane -p -J -t claude -S -500 2>/dev/null | awk '
+        # Only an OAuth authorize link counts; other claude.ai links must not
+        # displace it. Fragments are joined without separators because the
+        # CLI wraps mid-token.
+        function finish() {
+            if (url ~ /\/oauth\/authorize/) found = url
+            url = ""; collecting = 0
+        }
+        $0 ~ /https:\/\/(claude\.(com|ai)|console\.anthropic\.com|platform\.claude\.com)/ {
+            finish()
+            match($0, /https:\/\/[A-Za-z0-9._~:\/?#@!$&()*+,;=%-]*/)
+            url = substr($0, RSTART, RLENGTH)
+            collecting = 1
+            next
+        }
+        collecting {
+            if (NF == 0) { finish() }
+            else if (match($0, /[A-Za-z0-9._~:\/?#@!$&()*+,;=%-]+/)) {
+                url = url substr($0, RSTART, RLENGTH)
+            }
+        }
+        END { finish(); print found }
+    '
+}
+
+is_logged_in() {
+    [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && return 0
+    local cred="${CLAUDE_CONFIG_DIR}/.credentials.json" expires_at
+    [ -f "$cred" ] || return 1
+    expires_at=$(jq -r '.claudeAiOauth.expiresAt // empty' "$cred" 2>/dev/null)
+    [ -n "$expires_at" ] && [ "$expires_at" -gt "$(($(date +%s) * 1000))" ] 2>/dev/null
+}
+
+call_service() {
+    curl -s -X POST \
+        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "$2" \
+        "http://supervisor/core/api/services/persistent_notification/$1" >/dev/null 2>&1
+}
+
+notify() {
+    call_service create "$(jq -n --arg url "$1" --arg id "$NOTIFICATION_ID" '{
+        title: "Claude Code login",
+        message: "[Click here to authorize Claude Code](\($url))\n\nIf it does not open, copy this link instead:\n\($url)",
+        notification_id: $id
+    }')"
+}
+
+dismiss() {
+    call_service dismiss "$(jq -n --arg id "$NOTIFICATION_ID" '{notification_id: $id}')"
+}
+
+# A login URL belongs to the claude process that printed it; a notification
+# left over from a previous container points at a dead process.
+dismiss
+
+last_url=""
+notified=0
+while true; do
+    if tmux has-session -t claude 2>/dev/null; then
+        if is_logged_in; then
+            if [ "$notified" = 1 ]; then
+                dismiss
+                notified=0
+                last_url=""
+            fi
+        else
+            url=$(extract_url)
+            if [ -n "$url" ] && [ "$url" != "$last_url" ]; then
+                notify "$url"
+                last_url="$url"
+                notified=1
+            fi
+        fi
+    fi
+    sleep "$POLL_INTERVAL"
+done
