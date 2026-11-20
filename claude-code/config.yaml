@@ -29,7 +29,7 @@ options:
   experimental_code_mode: false
   statusline: true
   statusline_theme: tokyo-night
-  statusline_style: unicode
+  statusline_style: powerline
   statusline_segments:
     - directory
     - git

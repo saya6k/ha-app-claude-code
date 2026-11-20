@@ -70,6 +70,27 @@ RUN asset="claudebar-$(uname -m)-unknown-linux-musl.tar.gz" \
     && rm -rf /tmp/claudebar \
     && claudebar --version
 
+# Symbols Nerd Font (MIT) for powerline/Nerd Font glyphs in the browser
+# terminal: the browser draws the text, so the font is served to it by nginx
+# (fonts/) and wired into ttyd's page below — installing it in the image
+# alone would change nothing. Symbols-only, so normal text keeps the
+# system monospace font. Pinned by SHA-256.
+ARG NERD_FONTS_VERSION=v3.5.1
+ARG NERD_FONTS_SHA256=01172f37db8543edb102e5cb5c64101c9f4686630804d49b419aa07b23a69996
+RUN mkdir -p /tmp/nf /usr/share/claude-code/fonts \
+    && curl -fsSL -o /tmp/nf/symbols.tar.xz \
+        "https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONTS_VERSION}/NerdFontsSymbolsOnly.tar.xz" \
+    && echo "${NERD_FONTS_SHA256}  /tmp/nf/symbols.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/nf/symbols.tar.xz -C /tmp/nf SymbolsNerdFontMono-Regular.ttf LICENSE \
+    && install -m 0644 /tmp/nf/SymbolsNerdFontMono-Regular.ttf /usr/share/claude-code/fonts/ \
+    && install -m 0644 /tmp/nf/LICENSE /usr/share/claude-code/fonts/LICENSE-nerd-fonts \
+    && rm -rf /tmp/nf
+
+# ttyd's stock page with the font injected (see build-ttyd-index.sh).
+COPY build-ttyd-index.sh /tmp/build-ttyd-index.sh
+RUN bash /tmp/build-ttyd-index.sh /usr/share/claude-code/ttyd/index.html \
+    && rm /tmp/build-ttyd-index.sh
+
 COPY rootfs /
 
 RUN find /etc/s6-overlay/s6-rc.d -type f \( -name run -o -name finish -o -name up \) -exec chmod +x {} \; \
