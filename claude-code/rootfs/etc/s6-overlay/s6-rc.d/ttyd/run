@@ -35,6 +35,7 @@ exec ttyd \
     --writable \
     --ping-interval 30 \
     --client-option fontSize=14 \
+    --client-option macOptionClickForcesSelection=true \
     --client-option 'fontFamily=Menlo, Consolas, DejaVu Sans Mono, Liberation Mono, Symbols Nerd Font Mono, monospace' \
     --index /usr/share/claude-code/ttyd/index.html \
     tmux new-session -A -s claude -c /config "${claude_cmd}; exec bash -l"
