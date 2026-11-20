@@ -73,6 +73,7 @@ Pick one:
 | `claude_code_oauth_token` | password | empty | Optional long-lived token; overrides the saved `/login` session. |
 | `claude_code_version` | version | unset | Unset: latest release on every start. `2.1.300`: pin that version. |
 | `enable_remote_control` | bool | `false` | Runs `claude --remote-control 'Home Assistant'` so the session can also be driven from the Claude app / claude.ai/code. The session starts at app boot, without opening the panel. Requires a `/login` session — a `claude setup-token` token cannot establish Remote Control. |
+| `experimental_code_mode` | bool | `false` | Sets `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` for Claude Code's experimental Code Mode. A `"0"` in `settings.json`'s `env` still turns it off. |
 | `statusline` | bool | `true` | Show the [claudebar][claudebar] statusline under the prompt (usage limits, context, cost). |
 | `statusline_theme` / `statusline_style` | list | `tokyo-night` / `unicode` | `powerline`, `lean` and `rounded` need a Nerd Font in the browser. |
 | `statusline_segments` | list | claudebar's defaults | Order matters. `rate-limits` = 5-hour and weekly subscription usage. |

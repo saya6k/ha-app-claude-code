@@ -39,6 +39,16 @@ else
     bashio::log.info 'Not logged in yet — run /login in the terminal'
 fi
 
+# Code Mode (experimental): Claude Code reads CLAUDE_CODE_EXPERIMENTAL_CODE_MODE
+# from the environment (1 = on). An explicit "0" in settings.json's env still
+# turns it off, since Claude Code lets any "off" source win.
+code_mode_file=/run/s6/container_environment/CLAUDE_CODE_EXPERIMENTAL_CODE_MODE
+rm -f "${code_mode_file}"
+if bashio::config.true 'experimental_code_mode'; then
+    printf '1' > "${code_mode_file}"
+    bashio::log.info 'Code Mode (experimental) enabled'
+fi
+
 # claudebar statusline. The app options are the source of truth: config.toml
 # is regenerated on every start (edits made with `claudebar config` do not
 # survive a restart). settings.json gets claudebar's statusLine only when it
