@@ -1,5 +1,5 @@
 # Home Assistant
 
 - `/config` is the Home Assistant configuration directory.
-- HA REST API: `http://supervisor/core/api/`; Supervisor API: `http://supervisor/` (both with `Authorization: Bearer $SUPERVISOR_TOKEN`).
-- Run `curl -sX POST -H "Authorization: Bearer $SUPERVISOR_TOKEN" http://supervisor/core/check` before restarting Home Assistant.
+- Use the `ha` CLI for Supervisor tasks (`ha core check`, `ha core logs`, `ha apps …`); the HA REST API is at `http://supervisor/core/api/` with `Authorization: Bearer $SUPERVISOR_TOKEN`.
+- Restarting Home Assistant runs `ha core check` first and is blocked if the configuration is invalid — fix the reported errors, then restart again.

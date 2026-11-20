@@ -49,19 +49,32 @@ if bashio::config.true 'experimental_code_mode'; then
     bashio::log.info 'Code Mode (experimental) enabled'
 fi
 
-# claudebar statusline. The app options are the source of truth: config.toml
-# is regenerated on every start (edits made with `claudebar config` do not
-# survive a restart). settings.json gets claudebar's statusLine only when it
-# has none or already points at claudebar, so a user's own statusLine wins.
+# settings.json entries the app manages: claudebar's statusLine and the
+# restart-guard hook. Both are edited on a working copy that replaces the
+# file only when something changed, and only the app's own entries are ever
+# added or removed — a user's own statusLine or hooks are left alone.
 settings="${CLAUDE_CONFIG_DIR}/settings.json"
-statusline='{"type":"command","command":"claudebar render"}'
+work="${settings}.app-tmp"
+
+edit() {  # edit JQ_FILTER [jq args...] — apply a filter to the working copy
+    local filter=$1
+    shift
+    jq "$@" "${filter}" "${work}" > "${work}.next" && mv "${work}.next" "${work}"
+}
+
 if ! jq -e . "${settings}" >/dev/null 2>&1; then
-    bashio::log.warning "${settings} is not valid JSON; statusline not changed"
-elif bashio::config.true 'statusline'; then
-    cb_config="${XDG_CONFIG_HOME:-${HOME}/.config}/claudebar/config.toml"
-    mkdir -p "$(dirname "${cb_config}")"
-    segments=$(bashio::config 'statusline_segments' | jq -R . | jq -sc .)
-    cat > "${cb_config}" <<TOML
+    bashio::log.warning "${settings} is not valid JSON; statusline and hooks not changed"
+else
+    cp "${settings}" "${work}"
+
+    # claudebar statusline. The app options are the source of truth:
+    # config.toml is regenerated on every start (edits made with
+    # `claudebar config` do not survive a restart).
+    if bashio::config.true 'statusline'; then
+        cb_config="${XDG_CONFIG_HOME:-${HOME}/.config}/claudebar/config.toml"
+        mkdir -p "$(dirname "${cb_config}")"
+        segments=$(bashio::config 'statusline_segments' | jq -R . | jq -sc .)
+        cat > "${cb_config}" <<TOML
 # Generated from the Claude Code app options on every start — edit those.
 theme = "$(bashio::config 'statusline_theme')"
 style = "$(bashio::config 'statusline_style')"
@@ -72,21 +85,33 @@ warn = $(bashio::config 'statusline_warn')
 crit = $(bashio::config 'statusline_crit')
 weekly_show_at = $(bashio::config 'statusline_weekly_show_at')
 TOML
-    if jq -e '(.statusLine // null) == null or ((.statusLine.command // "") | startswith("claudebar"))' "${settings}" >/dev/null; then
-        jq --argjson v "${statusline}" '.statusLine = $v' "${settings}" > "${settings}.tmp"
+        if jq -e '(.statusLine // null) == null or ((.statusLine.command // "") | startswith("claudebar"))' "${work}" >/dev/null; then
+            edit '.statusLine = {"type": "command", "command": "claudebar render"}'
+        else
+            bashio::log.info "settings.json has its own statusLine; claudebar not wired in"
+        fi
     else
-        bashio::log.info "settings.json has its own statusLine; claudebar not wired in"
+        edit 'if ((.statusLine.command // "") | startswith("claudebar")) then del(.statusLine) else . end'
     fi
-else
-    jq 'if ((.statusLine.command // "") | startswith("claudebar")) then del(.statusLine) else . end' \
-        "${settings}" > "${settings}.tmp"
-fi
-if [ -f "${settings}.tmp" ]; then
-    if cmp -s "${settings}" "${settings}.tmp"; then
-        rm -f "${settings}.tmp"
+
+    # Restart guard: a PreToolUse hook on Bash that runs `ha core check`
+    # before any Home Assistant restart and blocks it on an invalid config.
+    # Always strip ours first, then re-add it when enabled.
+    edit '
+        if .hooks.PreToolUse then
+            .hooks.PreToolUse |= map(.hooks |= map(select(.command != "ha-restart-guard")) | select(.hooks | length > 0))
+        else . end
+        | if .hooks.PreToolUse == [] then del(.hooks.PreToolUse) else . end
+        | if .hooks == {} then del(.hooks) else . end'
+    if bashio::config.true 'restart_guard'; then
+        edit '.hooks.PreToolUse += [{"matcher": "Bash", "hooks": [{"type": "command", "command": "ha-restart-guard", "timeout": 300}]}]'
+    fi
+
+    if cmp -s "${settings}" "${work}"; then
+        rm -f "${work}"
     else
-        mv "${settings}.tmp" "${settings}"
-        bashio::log.info "Updated statusLine in ${settings}"
+        mv "${work}" "${settings}"
+        bashio::log.info "Updated statusLine/hooks in ${settings}"
     fi
 fi
 
