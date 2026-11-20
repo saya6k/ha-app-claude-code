@@ -39,6 +39,47 @@ else
     bashio::log.info 'Not logged in yet — run /login in the terminal'
 fi
 
+# claudebar statusline. The app options are the source of truth: config.toml
+# is regenerated on every start (edits made with `claudebar config` do not
+# survive a restart). settings.json gets claudebar's statusLine only when it
+# has none or already points at claudebar, so a user's own statusLine wins.
+settings="${CLAUDE_CONFIG_DIR}/settings.json"
+statusline='{"type":"command","command":"claudebar render"}'
+if ! jq -e . "${settings}" >/dev/null 2>&1; then
+    bashio::log.warning "${settings} is not valid JSON; statusline not changed"
+elif bashio::config.true 'statusline'; then
+    cb_config="${XDG_CONFIG_HOME:-${HOME}/.config}/claudebar/config.toml"
+    mkdir -p "$(dirname "${cb_config}")"
+    segments=$(bashio::config 'statusline_segments' | jq -R . | jq -sc .)
+    cat > "${cb_config}" <<TOML
+# Generated from the Claude Code app options on every start — edit those.
+theme = "$(bashio::config 'statusline_theme')"
+style = "$(bashio::config 'statusline_style')"
+segments = ${segments}
+
+[thresholds]
+warn = $(bashio::config 'statusline_warn')
+crit = $(bashio::config 'statusline_crit')
+weekly_show_at = $(bashio::config 'statusline_weekly_show_at')
+TOML
+    if jq -e '(.statusLine // null) == null or ((.statusLine.command // "") | startswith("claudebar"))' "${settings}" >/dev/null; then
+        jq --argjson v "${statusline}" '.statusLine = $v' "${settings}" > "${settings}.tmp"
+    else
+        bashio::log.info "settings.json has its own statusLine; claudebar not wired in"
+    fi
+else
+    jq 'if ((.statusLine.command // "") | startswith("claudebar")) then del(.statusLine) else . end' \
+        "${settings}" > "${settings}.tmp"
+fi
+if [ -f "${settings}.tmp" ]; then
+    if cmp -s "${settings}" "${settings}.tmp"; then
+        rm -f "${settings}.tmp"
+    else
+        mv "${settings}.tmp" "${settings}"
+        bashio::log.info "Updated statusLine in ${settings}"
+    fi
+fi
+
 # Latest release on every start, or the pinned claude_code_version.
 if bashio::config.has_value 'claude_code_version'; then
     bashio::log.info "Claude Code pinned to $(bashio::config 'claude_code_version')"

@@ -73,6 +73,21 @@ Pick one:
 | `claude_code_oauth_token` | password | empty | Optional long-lived token; overrides the saved `/login` session. |
 | `claude_code_version` | version | unset | Unset: latest release on every start. `2.1.300`: pin that version. |
 | `enable_remote_control` | bool | `false` | Runs `claude --remote-control 'Home Assistant'` so the session can also be driven from the Claude app / claude.ai/code. The session starts at app boot, without opening the panel. Requires a `/login` session — a `claude setup-token` token cannot establish Remote Control. |
+| `statusline` | bool | `true` | Show the [claudebar][claudebar] statusline under the prompt (usage limits, context, cost). |
+| `statusline_theme` / `statusline_style` | list | `tokyo-night` / `unicode` | `powerline`, `lean` and `rounded` need a Nerd Font in the browser. |
+| `statusline_segments` | list | claudebar's defaults | Order matters. `rate-limits` = 5-hour and weekly subscription usage. |
+| `statusline_warn` / `statusline_crit` | % | `50` / `80` | Bar colour thresholds. |
+| `statusline_weekly_show_at` | % | `75` | Show the weekly limit from this usage; `0` = always. |
+
+## Statusline
+
+The app writes claudebar's `config.toml` from the options on every start
+(edits made with `claudebar config` do not survive a restart) and adds
+`"statusLine": {"type": "command", "command": "claudebar render"}` to
+`/addon_config/settings.json`. If that file already has a different
+`statusLine`, it is left alone; turning `statusline` off removes only
+claudebar's entry. The 5-hour and weekly bars appear once Claude Code
+reports them, which it does for Claude subscription logins.
 
 ## Updates
 
@@ -110,3 +125,4 @@ tmux mouse mode is on (the wheel scrolls history). Hold **Shift** (macOS:
 
 [claude-code]: https://docs.claude.com/en/docs/claude-code/overview
 [settings]: https://docs.claude.com/en/docs/claude-code/settings
+[claudebar]: https://github.com/micschr0/claudebar

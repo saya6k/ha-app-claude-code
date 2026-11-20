@@ -55,6 +55,21 @@ RUN case "$(apk --print-arch)" in \
     && rm -rf /tmp/package \
     && claude --version
 
+# claudebar: statusline under the Claude Code prompt (usage limits, context,
+# cost). Musl build from the GitHub release, SHA256-verified. init-claude
+# writes its config from the app options and wires it into settings.json.
+ARG CLAUDEBAR_VERSION=2026.8.27
+RUN asset="claudebar-$(uname -m)-unknown-linux-musl.tar.gz" \
+    && url="https://github.com/micschr0/claudebar/releases/download/${CLAUDEBAR_VERSION}/${asset}" \
+    && mkdir -p /tmp/claudebar \
+    && curl -fsSL -o "/tmp/claudebar/${asset}" "${url}" \
+    && curl -fsSL "${url}.sha256" \
+        | awk -v f="/tmp/claudebar/${asset}" 'NF {print $1 "  " f}' | sha256sum -c - \
+    && tar -xzf "/tmp/claudebar/${asset}" -C /tmp/claudebar \
+    && install -m 0755 "$(find /tmp/claudebar -type f -name claudebar | head -1)" /usr/local/bin/claudebar \
+    && rm -rf /tmp/claudebar \
+    && claudebar --version
+
 COPY rootfs /
 
 RUN find /etc/s6-overlay/s6-rc.d -type f \( -name run -o -name finish -o -name up \) -exec chmod +x {} \; \
