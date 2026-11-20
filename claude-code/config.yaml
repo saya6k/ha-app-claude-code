@@ -13,10 +13,8 @@ arch:
 init: false
 startup: services
 ingress: true
-ingress_port: 8099
 panel_icon: mdi:asterisk
 panel_title: Claude Code
-panel_admin: true
 # homeassistant_api: HA REST API via http://supervisor/core/api — the default
 #   `ha` MCP server (/core/api/mcp) and login-url-watcher's notification.
 # hassio_api + manager: Supervisor API for Claude — config check, core
