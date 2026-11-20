@@ -170,6 +170,8 @@ jobs:
           docker exec cc claude-select 2.1.328
           docker exec cc claude --version | grep -F 2.1.328
           docker exec cc sh -c 'git -C /config init -q && rg --version >/dev/null'
+          echo '{"workspace":{"current_dir":"/config"},"model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":42}}}' \
+            | docker exec -i cc claudebar render | grep -F '42%'
           docker exec cc sh -c 'printf "#!/bin/sh\necho ok\n" > /config/t.sh && chmod +x /config/t.sh && /config/t.sh'
           docker exec cc sh -c 'TERM=xterm-256color tmux new-session -d -s claude -x 120 -y 40 -c /config "claude; exec bash -l"'
           sleep 10
