@@ -133,6 +133,62 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=min,scope=${{ matrix.arch }}
 
+  # Boots the image under apparmor.txt on an AppArmor-enabled runner and
+  # exercises the real paths (s6, nginx → ttyd, claude in tmux,
+  # claude-select download, git, user scripts in /config). Any DENIED line
+  # for the profile in the kernel log fails the job.
+  apparmor:
+    name: AppArmor runtime
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build -t claude-code-test claude-code
+      - name: Load profile
+        run: |
+          set -euo pipefail
+          sudo apparmor_parser -r -W claude-code/apparmor.txt
+          sudo aa-status | grep -F hassio_claude-code
+      - name: Boot and exercise under the profile
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/config" "$RUNNER_TEMP/addon_config"
+          docker run -d --name cc \
+            --security-opt apparmor=hassio_claude-code \
+            -v "$RUNNER_TEMP/config:/config" \
+            -v "$RUNNER_TEMP/addon_config:/addon_config" \
+            claude-code-test
+          for _ in $(seq 1 60); do
+            docker logs cc 2>&1 | grep -q 'service nginx successfully started' && break
+            sleep 2
+          done
+          docker exec cc cat /proc/1/attr/current
+          docker exec cc curl -fs -o /dev/null http://127.0.0.1:8099/
+          docker exec cc claude --version
+          docker exec cc claude-select 2.1.328
+          docker exec cc claude --version | grep -F 2.1.328
+          docker exec cc sh -c 'git -C /config init -q && rg --version >/dev/null'
+          docker exec cc sh -c 'printf "#!/bin/sh\necho ok\n" > /config/t.sh && chmod +x /config/t.sh && /config/t.sh'
+          docker exec cc sh -c 'TERM=xterm-256color tmux new-session -d -s claude -x 120 -y 40 -c /config "claude; exec bash -l"'
+          sleep 10
+          docker exec cc tmux capture-pane -p -t claude | grep -F 'Claude Code'
+      - name: Container log
+        if: always()
+        run: docker logs cc 2>&1 | tail -50
+      - name: Check for AppArmor denials
+        if: always()
+        run: |
+          set -euo pipefail
+          denials=$(sudo dmesg | grep 'apparmor="DENIED"' | grep 'hassio_claude-code' || true)
+          if [ -n "$denials" ]; then
+            echo "$denials"
+            echo "::error::AppArmor denials for hassio_claude-code"
+            exit 1
+          fi
+          echo "No AppArmor denials"
+
   ci-ok:
     name: CI passed
     if: always()
@@ -144,6 +200,7 @@ jobs:
       - lint-unicode
       - lint-markdown
       - build-test
+      - apparmor
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs succeeded (or cleanly skipped)
@@ -156,7 +213,8 @@ jobs:
             "${{ needs.lint-shell.result }}" \
             "${{ needs.lint-unicode.result }}" \
             "${{ needs.lint-markdown.result }}" \
-            "${{ needs.build-test.result }}"; do
+            "${{ needs.build-test.result }}" \
+            "${{ needs.apparmor.result }}"; do
             case "$result" in
               success|skipped) ;;
               *) echo "job failed: $result"; exit 1 ;;

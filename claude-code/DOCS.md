@@ -91,6 +91,9 @@ and start a new Claude session.
 - Only Home Assistant ingress can reach the terminal: nginx admits the
   Supervisor (`172.30.32.2`) and loopback, ttyd listens on loopback only.
   No host port is published. The panel is admin-only.
+- A custom AppArmor profile (`apparmor.txt`) confines the container: file
+  access inside it stays broad so Claude can work, but extra capabilities,
+  mounts, raw sockets and tracing other processes are denied.
 - The terminal is a root shell with read/write access to your HA config,
   the Home Assistant REST API, and the Supervisor API with the `manager`
   role (`$SUPERVISOR_TOKEN`): it can check the config, restart Home
