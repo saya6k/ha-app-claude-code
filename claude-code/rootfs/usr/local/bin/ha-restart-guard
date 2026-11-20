@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# ha-restart-guard — Claude Code PreToolUse hook (Bash), wired into
+# settings.json by init-claude when the restart_guard option is on.
+#
+# Before a command that restarts or rebuilds Home Assistant runs, validate
+# the configuration with `ha core check`. If the check fails, exit 2: Claude
+# Code blocks the command and hands this script's stderr back to Claude, so
+# Home Assistant is never restarted into a config it cannot load.
+#
+# Matching is on the command text, so this guards against mistakes, not
+# against deliberate workarounds.
+set -uo pipefail
+
+cmd=$(jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
+[ -n "${cmd}" ] || exit 0
+
+restart_re='(^|[^[:alnum:]_-])ha[[:space:]]+(core|homeassistant|home-assistant|ha)[[:space:]]+(restart|reboot|rebuild|rb|reinstall)([^[:alnum:]_-]|$)'
+restart_re+='|supervisor/(core|homeassistant)/(restart|rebuild)'
+restart_re+='|services/homeassistant/restart'
+
+grep -qE -- "${restart_re}" <<<"${cmd}" || exit 0
+
+if out=$(ha core check --no-progress 2>&1); then
+    exit 0
+fi
+
+{
+    echo "Blocked: 'ha core check' failed, so Home Assistant was not restarted."
+    echo "Fix the configuration below, then restart again."
+    echo
+    echo "${out}"
+} >&2
+exit 2

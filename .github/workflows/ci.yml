@@ -169,6 +169,7 @@ jobs:
           docker exec cc curl -fs http://127.0.0.1:8099/ | grep -qF 'Symbols Nerd Font Mono'
           docker exec cc curl -fs -o /dev/null http://127.0.0.1:8099/fonts/SymbolsNerdFontMono-Regular.ttf
           docker exec cc claude --version
+          docker exec cc ha --help >/dev/null
           docker exec cc claude-select 2.1.328
           docker exec cc claude --version | grep -F 2.1.328
           docker exec cc sh -c 'git -C /config init -q && rg --version >/dev/null'

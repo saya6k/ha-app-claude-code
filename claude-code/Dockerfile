@@ -70,6 +70,21 @@ RUN asset="claudebar-$(uname -m)-unknown-linux-musl.tar.gz" \
     && rm -rf /tmp/claudebar \
     && claudebar --version
 
+# Home Assistant CLI (`ha`, Apache-2.0): static Go binary, pinned by the
+# SHA-256 GitHub publishes per asset. Talks to http://supervisor with
+# SUPERVISOR_TOKEN; also used by the ha-restart-guard hook.
+ARG HA_CLI_VERSION=6.0.0
+ARG HA_CLI_SHA256_AMD64=faab39046723cb68d43e9d5c8ac5a2cf105f3ecb3f5c8a01c0999c2699c56489
+ARG HA_CLI_SHA256_AARCH64=514cd052627358d673842e6132d4d0fc88f246c1af767a895c2b529a153c0c59
+RUN case "$(apk --print-arch)" in \
+        x86_64)  arch=amd64;   sha="${HA_CLI_SHA256_AMD64}" ;; \
+        aarch64) arch=aarch64; sha="${HA_CLI_SHA256_AARCH64}" ;; \
+    esac \
+    && curl -fsSL -o /usr/local/bin/ha "https://github.com/home-assistant/cli/releases/download/${HA_CLI_VERSION}/ha_${arch}" \
+    && echo "${sha}  /usr/local/bin/ha" | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/ha \
+    && ha --help >/dev/null
+
 # Symbols Nerd Font (MIT) for powerline/Nerd Font glyphs in the browser
 # terminal: the browser draws the text, so the font is served to it by nginx
 # (fonts/) and wired into ttyd's page below — installing it in the image
@@ -94,7 +109,7 @@ RUN bash /tmp/build-ttyd-index.sh /usr/share/claude-code/ttyd/index.html \
 COPY rootfs /
 
 RUN find /etc/s6-overlay/s6-rc.d -type f \( -name run -o -name finish -o -name up \) -exec chmod +x {} \; \
-    && chmod +x /usr/local/bin/login-url-watcher /usr/local/bin/claude-select
+    && chmod +x /usr/local/bin/login-url-watcher /usr/local/bin/claude-select /usr/local/bin/ha-restart-guard
 
 HEALTHCHECK --start-period=30s --interval=30s --timeout=5s --retries=3 \
     CMD ["curl", "-fs", "-o", "/dev/null", "http://127.0.0.1:8099/"]
