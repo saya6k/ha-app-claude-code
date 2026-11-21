@@ -47,6 +47,9 @@ rm -f "${code_mode_file}"
 if bashio::config.true 'experimental_code_mode'; then
     printf '1' > "${code_mode_file}"
     bashio::log.info 'Code Mode (experimental) enabled'
+    if bashio::config.true 'enable_remote_control'; then
+        bashio::log.warning 'Code Mode does not work with Remote Control; Claude Code starts with the ordinary tools. Turn off enable_remote_control to use Code Mode.'
+    fi
 fi
 
 # settings.json entries the app manages: claudebar's statusLine and the
