@@ -102,7 +102,7 @@ RUN mkdir -p /tmp/nf /usr/share/claude-code/fonts \
     && rm -rf /tmp/nf
 
 # ttyd's stock page plus the font and ttyd-extras.js (font redraw, OSC 52
-# clipboard) — see build-ttyd-index.sh.
+# clipboard, Korean IME on WebKit) — see build-ttyd-index.sh.
 COPY build-ttyd-index.sh ttyd-extras.js /tmp/ttyd-page/
 RUN bash /tmp/ttyd-page/build-ttyd-index.sh /usr/share/claude-code/ttyd/index.html /tmp/ttyd-page/ttyd-extras.js \
     && rm -rf /tmp/ttyd-page

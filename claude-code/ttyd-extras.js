@@ -17,6 +17,17 @@
 //    that can write to the terminal read the user's clipboard.
 //
 // OSC 52 approach adapted from heytcass/claude-terminal's ttyd-extras.js.
+//
+// 3. Korean IME on WebKit (Home Assistant app, Safari). WebKit fires no
+//    composition events for Hangul: a new jamo or syllable arrives as an
+//    `insertText` input event and every later change to the syllable being
+//    composed as `insertReplacementText` (ㅎ → 하 → 한), each before its
+//    keydown (keyCode 229). xterm.js only handles `insertText`, so only the
+//    first jamo of each syllable reached the terminal. Send each jamo at
+//    once and replace it on every change with DEL + the new syllable, so
+//    what is on screen is always what the program drew, mid-line too.
+//    Browsers that fire composition events (Chrome, Firefox) are left to
+//    xterm.js. Event analysis from xterm.js PR #5704.
 (function () {
     'use strict';
 
@@ -85,6 +96,62 @@
         if (term.parser && term.parser.registerOscHandler) {
             term.parser.registerOscHandler(52, onOsc52);
         }
+    });
+
+    function isHangul(s) {
+        var c = s.charCodeAt(0);
+        return (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F) ||
+            (c >= 0xA960 && c <= 0xA97F) || (c >= 0xAC00 && c <= 0xD7FF);
+    }
+
+    var MODIFIERS = { Shift: 1, Control: 1, Alt: 1, Meta: 1, CapsLock: 1 };
+
+    withTerm(function (term) {
+        var ta = term.textarea, root = term.element;
+        if (!ta || !root) return;
+        var composing = false; // standard composition events: xterm.js handles those
+        var webkit = false;    // WebKit pattern seen: 229 keydowns are ours from now on
+        var current = '';      // syllable being composed, already sent
+
+        // Capture on an ancestor runs before xterm.js's own textarea listeners.
+        function ours(e) { return e.target === ta && !composing && !term.options.screenReaderMode; }
+
+        root.addEventListener('compositionstart', function () { current = ''; composing = true; }, true);
+        root.addEventListener('compositionend', function () { composing = false; }, true);
+
+        root.addEventListener('input', function (e) {
+            if (!ours(e)) return;
+            if (e.inputType === 'insertReplacementText' && e.data) {
+                webkit = true;
+                // No current syllable: a key such as Backspace already
+                // removed it from the terminal, so just send the new one.
+                if (e.data !== current) term.input((current ? '\x7f' : '') + e.data, true);
+                current = e.data;
+            } else if (e.inputType === 'insertText' && e.data && isHangul(e.data)) {
+                webkit = true;
+                term.input(e.data, true);
+                current = e.data.slice(-1);
+            } else if (e.inputType === 'deleteContentBackward' && current) {
+                // The IME removed the last jamo itself (no Backspace keydown
+                // reset `current` first), so xterm.js sent nothing.
+                term.input('\x7f', true);
+                current = '';
+            } else {
+                return;
+            }
+            e.stopImmediatePropagation();
+        }, true);
+
+        root.addEventListener('keydown', function (e) {
+            if (!ours(e)) return;
+            if (e.keyCode === 229) {
+                // xterm.js would diff the textarea here and resend its whole
+                // value; the input event already carried the text.
+                if (webkit) e.stopImmediatePropagation();
+                return;
+            }
+            if (!MODIFIERS[e.key]) current = '';
+        }, true);
     });
 
     if (document.fonts && document.fonts.load) {
