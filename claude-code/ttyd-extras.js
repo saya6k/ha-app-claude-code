@@ -73,7 +73,7 @@
         var i = data.indexOf(';');
         if (i === -1) return true;
         var payload = data.slice(i + 1);
-        if (payload === '?' || payload.length > OSC52_MAX || !BASE64.test(payload)) return true;
+        if (payload === '?' || payload === '' || payload.length > OSC52_MAX || !BASE64.test(payload)) return true;
         try {
             var bytes = Uint8Array.from(atob(payload), function (c) { return c.charCodeAt(0); });
             writeClipboard(new TextDecoder().decode(bytes));
