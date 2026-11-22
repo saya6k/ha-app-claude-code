@@ -54,6 +54,8 @@ jobs:
             os: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.init.outputs.version }}
 
       - name: Build and push per-arch image
         uses: home-assistant/builder/actions/build-image@2026.06.0
@@ -106,7 +108,9 @@ jobs:
           set -euo pipefail
           metadata="$(mktemp)"
           tags=(--tag "${{ env.IMAGE }}:${VERSION}" --tag "${{ env.IMAGE }}:latest")
-          if [ "${IS_PRERELEASE}" != "true" ]; then
+          # workflow_dispatch has no release payload: a SemVer pre-release
+          # suffix (1.2.0-rc1) marks the version as not stable.
+          if [ "${IS_PRERELEASE}" != "true" ] && [[ "${VERSION}" != *-* ]]; then
             tags+=(--tag "${{ env.IMAGE }}:stable")
           fi
           docker buildx imagetools create \

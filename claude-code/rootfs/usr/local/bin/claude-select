@@ -67,7 +67,7 @@ if [ -z "${want}" ]; then
     want=$(curl -fsS --connect-timeout 10 --max-time 20 "${NPM}/@anthropic-ai/claude-code/latest" \
         | jq -r '.version // empty') || want=""
     if [ -z "${want}" ]; then
-        want=$(cat "${CACHE}/current" 2>/dev/null)
+        want=$(cat "${CACHE}/current" 2>/dev/null || true)
         bashio::log.warning "Could not look up the latest Claude Code; keeping ${want:-the bundled build}"
     fi
 fi
@@ -81,7 +81,7 @@ else
     if download "${want}"; then
         use "${CACHE}/${want}/claude" "${want}"
     else
-        last=$(cat "${CACHE}/current" 2>/dev/null)
+        last=$(cat "${CACHE}/current" 2>/dev/null || true)
         if [ -n "${last}" ] && [ "${last}" != "${BUNDLED_VERSION}" ] && works "${CACHE}/${last}/claude"; then
             use "${CACHE}/${last}/claude" "${last}"
         else
@@ -90,9 +90,10 @@ else
     fi
 fi
 
-# Keep only the active build; each one is ~200 MB.
+# Keep only the active build; each one is ~200 MB. .dl.* are downloads
+# interrupted by an app stop.
 active=$(cat "${CACHE}/current")
-for dir in "${CACHE}"/*/; do
+for dir in "${CACHE}"/*/ "${CACHE}"/.dl.*/; do
     [ "$(basename "${dir}")" = "${active}" ] || rm -rf "${dir}"
 done
 exit 0

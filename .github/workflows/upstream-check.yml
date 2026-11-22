@@ -29,8 +29,11 @@ jobs:
           echo "Current: $CURRENT"
           [ "$LATEST" = "$CURRENT" ] && echo "Up to date." && exit 0
 
-          gh pr list --head "upstream/claude-code-${LATEST}" --json number --jq 'length' \
-            | grep -qv '^0$' && echo "PR already open." && exit 0
+          gh pr list --state all --head "upstream/claude-code-${LATEST}" --json number --jq 'length' \
+            | grep -qv '^0$' && echo "PR already exists (open, merged or closed)." && exit 0
+          if git ls-remote --exit-code --heads origin "upstream/claude-code-${LATEST}" >/dev/null; then
+            echo "Branch upstream/claude-code-${LATEST} already exists." && exit 0
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

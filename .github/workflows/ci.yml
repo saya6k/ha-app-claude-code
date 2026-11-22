@@ -53,9 +53,11 @@ jobs:
         id: collect
         run: |
           set -euo pipefail
-          mapfile -t FILES < <(find claude-code/rootfs \
-            -type f \( -name '*.sh' -o -name 'run' -o -name 'finish' \) \
-            2>/dev/null || true)
+          mapfile -t FILES < <( { find claude-code/rootfs \
+            -type f \( -name '*.sh' -o -name 'run' -o -name 'finish' \) ;
+            find claude-code/rootfs/usr/local/bin -type f ;
+            find claude-code -maxdepth 1 -type f -name '*.sh' ; } \
+            2>/dev/null | sort -u || true)
           if [ "${#FILES[@]}" -eq 0 ]; then
             echo "found=false" >> "$GITHUB_OUTPUT"
           else
@@ -81,7 +83,8 @@ jobs:
           FOUND=$(find claude-code -type f \( \
             -name '*.yaml' -o -name '*.yml' -o \
             -name '*.py'   -o -name '*.sh'  -o \
-            -name 'run'    -o -name 'finish' \
+            -name 'run'    -o -name 'finish' -o \
+            -path 'claude-code/rootfs/usr/local/bin/*' \
           \) -print0 \
             | xargs -0 --no-run-if-empty grep -Pln \
               '[\x{a0}\x{2002}-\x{200b}\x{202f}\x{205f}\x{3000}]' \

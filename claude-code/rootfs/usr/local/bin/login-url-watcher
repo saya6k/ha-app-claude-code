@@ -27,10 +27,12 @@ extract_url() {
             next
         }
         collecting {
-            if (NF == 0) { finish() }
-            else if (match($0, /[A-Za-z0-9._~:\/?#@!$&()*+,;=%-]+/)) {
+            # A continuation line is nothing but URL characters; anything
+            # else (blank line, prompt text) ends the URL.
+            if ($0 ~ /^[[:space:]]*[A-Za-z0-9._~:\/?#@!$&()*+,;=%-]+[[:space:]]*$/) {
+                match($0, /[A-Za-z0-9._~:\/?#@!$&()*+,;=%-]+/)
                 url = url substr($0, RSTART, RLENGTH)
-            }
+            } else { finish() }
         }
         END { finish(); print found }
     '
@@ -40,6 +42,9 @@ is_logged_in() {
     [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && return 0
     local cred="${CLAUDE_CONFIG_DIR}/.credentials.json" expires_at
     [ -f "$cred" ] || return 1
+    # The access token is short-lived and refreshed only on Claude's next
+    # request; a refresh token means the login is still good.
+    jq -e '.claudeAiOauth.refreshToken // "" | length > 0' "$cred" >/dev/null 2>&1 && return 0
     expires_at=$(jq -r '.claudeAiOauth.expiresAt // empty' "$cred" 2>/dev/null)
     [ -n "$expires_at" ] && [ "$expires_at" -gt "$(($(date +%s) * 1000))" ] 2>/dev/null
 }
@@ -76,7 +81,8 @@ while true; do
             if [ "$notified" = 1 ]; then
                 dismiss
                 notified=0
-                last_url=""
+                # last_url is kept: the used URL stays in scrollback and must
+                # not be posted again.
             fi
         else
             url=$(extract_url)

@@ -62,11 +62,18 @@ work="${settings}.app-tmp"
 edit() {  # edit JQ_FILTER [jq args...] — apply a filter to the working copy
     local filter=$1
     shift
-    jq "$@" "${filter}" "${work}" > "${work}.next" && mv "${work}.next" "${work}"
+    if jq "$@" "${filter}" "${work}" > "${work}.next" 2>/dev/null; then
+        mv "${work}.next" "${work}"
+    else
+        # An unexpected shape (e.g. a string statusLine) must not stop the
+        # app from starting: skip this one change.
+        rm -f "${work}.next"
+        bashio::log.warning "settings.json has an unexpected structure; a statusLine/hooks change was skipped"
+    fi
 }
 
-if ! jq -e . "${settings}" >/dev/null 2>&1; then
-    bashio::log.warning "${settings} is not valid JSON; statusline and hooks not changed"
+if ! jq -e 'type == "object"' "${settings}" >/dev/null 2>&1; then
+    bashio::log.warning "${settings} is not a valid JSON object; statusline and hooks not changed"
 else
     cp "${settings}" "${work}"
 
@@ -102,7 +109,10 @@ TOML
     # Always strip ours first, then re-add it when enabled.
     edit '
         if .hooks.PreToolUse then
-            .hooks.PreToolUse |= map(.hooks |= map(select(.command != "ha-restart-guard")) | select(.hooks | length > 0))
+            .hooks.PreToolUse |= map(
+                if (.hooks | type) == "array" then
+                    .hooks |= map(select(.command != "ha-restart-guard")) | select(.hooks | length > 0)
+                else . end)
         else . end
         | if .hooks.PreToolUse == [] then del(.hooks.PreToolUse) else . end
         | if .hooks == {} then del(.hooks) else . end'
