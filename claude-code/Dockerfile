@@ -7,7 +7,7 @@ FROM ${BUILD_FROM}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Bumped by .github/workflows/upstream-check.yml.
-ARG CLAUDE_CODE_VERSION=2.1.329
+ARG CLAUDE_CODE_VERSION=2.1.330
 
 LABEL \
     io.hass.type="app" \
