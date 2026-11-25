@@ -90,7 +90,7 @@ RUN case "$(apk --print-arch)" in \
     && chmod 0755 /usr/local/bin/ha \
     && ha --help >/dev/null
 
-# Home Assistant Builder (`hab`, Apache-2.0): static Go binary from
+# Home Assistant Builder (`hab`, Apache-2.0): Go binary from
 # balloob/home-assistant-build-cli for managing entities, automations,
 # dashboards, helpers… through the HA API. Authenticates with
 # SUPERVISOR_TOKEN on its own. Pinned by the SHA-256 GitHub publishes.
