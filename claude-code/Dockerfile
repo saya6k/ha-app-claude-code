@@ -23,17 +23,22 @@ LABEL \
 # DISABLE_AUTOUPDATER: claude-select (init-claude) installs the configured
 # version on every start instead.
 # USE_BUILTIN_RIPGREP=0: the bundled rg is glibc-only; use Alpine's.
+# HAB_SKIP_UPDATE_CHECK: hab is pinned below; a self-update would not
+# survive an image update anyway.
 ENV LANG=C.UTF-8 \
     HOME=/data/home \
     CLAUDE_CONFIG_DIR=/addon_config \
     DISABLE_AUTOUPDATER=1 \
-    USE_BUILTIN_RIPGREP=0
+    USE_BUILTIN_RIPGREP=0 \
+    HAB_SKIP_UPDATE_CHECK=1
 
 RUN apk add --no-cache \
         git \
+        github-cli \
         libgcc \
         libstdc++ \
         nginx \
+        openssh-client \
         ripgrep \
         tmux \
         ttyd
@@ -84,6 +89,24 @@ RUN case "$(apk --print-arch)" in \
     && echo "${sha}  /usr/local/bin/ha" | sha256sum -c - \
     && chmod 0755 /usr/local/bin/ha \
     && ha --help >/dev/null
+
+# Home Assistant Builder (`hab`, Apache-2.0): Go binary from
+# balloob/home-assistant-build-cli for managing entities, automations,
+# dashboards, helpers… through the HA API. Authenticates with
+# SUPERVISOR_TOKEN on its own. Pinned by the SHA-256 GitHub publishes.
+# The amd64 release is built natively with cgo and links glibc's libc.so.6
+# (arm64 is cross-compiled and static), so amd64 needs gcompat on musl.
+ARG HAB_VERSION=1.10.0
+ARG HAB_SHA256_AMD64=2d2c0529f61f1e6bd8759f1cdf0ece153c04f51b7eee0e6def28ad6bbac8bca0
+ARG HAB_SHA256_AARCH64=719c61fb3b0c7a8295a61113b4730f251b3c3fa5c833c5bab64e8865e3af5b90
+RUN case "$(apk --print-arch)" in \
+        x86_64)  arch=amd64; sha="${HAB_SHA256_AMD64}"; apk add --no-cache gcompat ;; \
+        aarch64) arch=arm64; sha="${HAB_SHA256_AARCH64}" ;; \
+    esac \
+    && curl -fsSL -o /usr/local/bin/hab "https://github.com/balloob/home-assistant-build-cli/releases/download/${HAB_VERSION}/hab-linux-${arch}" \
+    && echo "${sha}  /usr/local/bin/hab" | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/hab \
+    && hab --help >/dev/null
 
 # Symbols Nerd Font (MIT) for powerline/Nerd Font glyphs in the browser
 # terminal: the browser draws the text, so the font is served to it by nginx

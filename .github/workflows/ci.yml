@@ -138,7 +138,7 @@ jobs:
 
   # Boots the image under apparmor.txt on an AppArmor-enabled runner and
   # exercises the real paths (s6, nginx → ttyd, claude in tmux,
-  # claude-select download, git, user scripts in /config). Any DENIED line
+  # claude-select download, git, user scripts in the HA config). Any DENIED line
   # for the profile in the kernel log fails the job.
   apparmor:
     name: AppArmor runtime
@@ -160,7 +160,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/config" "$RUNNER_TEMP/addon_config"
           docker run -d --name cc \
             --security-opt apparmor=hassio_claude-code \
-            -v "$RUNNER_TEMP/config:/config" \
+            -v "$RUNNER_TEMP/config:/homeassistant" \
             -v "$RUNNER_TEMP/addon_config:/addon_config" \
             claude-code-test
           for _ in $(seq 1 60); do
@@ -173,13 +173,16 @@ jobs:
           docker exec cc curl -fs -o /dev/null http://127.0.0.1:8099/fonts/SymbolsNerdFontMono-Regular.ttf
           docker exec cc claude --version
           docker exec cc ha --help >/dev/null
+          docker exec cc hab --help >/dev/null
+          docker exec cc gh --version
+          docker exec cc ssh -V
           docker exec cc claude-select 2.1.328
           docker exec cc claude --version | grep -F 2.1.328
-          docker exec cc sh -c 'git -C /config init -q && rg --version >/dev/null'
-          echo '{"workspace":{"current_dir":"/config"},"model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":42}}}' \
+          docker exec cc sh -c 'git -C /homeassistant init -q && rg --version >/dev/null'
+          echo '{"workspace":{"current_dir":"/homeassistant"},"model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":42}}}' \
             | docker exec -i cc claudebar render | grep -F '42%'
-          docker exec cc sh -c 'printf "#!/bin/sh\necho ok\n" > /config/t.sh && chmod +x /config/t.sh && /config/t.sh'
-          docker exec cc sh -c 'TERM=xterm-256color tmux new-session -d -s claude -x 120 -y 40 -c /config "claude; exec bash -l"'
+          docker exec cc sh -c 'printf "#!/bin/sh\necho ok\n" > /homeassistant/t.sh && chmod +x /homeassistant/t.sh && /homeassistant/t.sh'
+          docker exec cc sh -c 'TERM=xterm-256color tmux new-session -d -s claude -x 120 -y 40 -c /homeassistant "claude; exec bash -l"'
           sleep 10
           docker exec cc tmux capture-pane -p -t claude | grep -F 'Claude Code'
       - name: Container log

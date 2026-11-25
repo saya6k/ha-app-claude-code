@@ -10,6 +10,11 @@
 # ==============================================================================
 claude_cmd='claude'
 
+# Start in the HA config folder when Claude may edit it (init-claude links
+# /config), otherwise in HOME.
+workdir="${HOME}"
+bashio::config.true 'config_access' && [ -d /config ] && workdir=/config
+
 if bashio::config.true 'enable_remote_control'; then
     # Fixed name: the default would be the container hostname (opaque hex).
     claude_cmd="claude --remote-control 'Home Assistant'"
@@ -23,7 +28,7 @@ if bashio::config.true 'enable_remote_control'; then
     # TERM matches what ttyd advertises. Skipped if the session survived a
     # restart of this service.
     if ! tmux has-session -t claude 2>/dev/null; then
-        TERM=xterm-256color tmux new-session -d -s claude -x 200 -y 50 -c /config "${claude_cmd}; exec bash -l" \
+        TERM=xterm-256color tmux new-session -d -s claude -x 200 -y 50 -c "${workdir}" "${claude_cmd}; exec bash -l" \
             && bashio::log.info "Remote Control enabled: session 'Home Assistant' started" \
             || bashio::log.warning 'Could not pre-start the session; it starts on the first panel visit'
     fi
@@ -38,4 +43,4 @@ exec ttyd \
     --client-option macOptionClickForcesSelection=true \
     --client-option 'fontFamily=Menlo, Consolas, DejaVu Sans Mono, Liberation Mono, Symbols Nerd Font Mono, monospace' \
     --index /usr/share/claude-code/ttyd/index.html \
-    tmux new-session -A -s claude -c /config "${claude_cmd}; exec bash -l"
+    tmux new-session -A -s claude -c "${workdir}" "${claude_cmd}; exec bash -l"

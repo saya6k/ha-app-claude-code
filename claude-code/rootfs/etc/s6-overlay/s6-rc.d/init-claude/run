@@ -24,6 +24,64 @@ done
 # Login tokens: owner-only, like Claude Code itself writes it.
 chmod 600 "${CLAUDE_CONFIG_DIR}/.credentials.json"
 
+# SSH credentials dropped into the user-editable app config folder (Samba,
+# File editor). Copied rather than linked: ssh refuses private keys that
+# others can read, and files written over Samba often are.
+mkdir -p "${CLAUDE_CONFIG_DIR}/ssh" "${HOME}/.ssh"
+chmod 700 "${HOME}/.ssh"
+for f in "${CLAUDE_CONFIG_DIR}"/ssh/*; do
+    [ -f "${f}" ] || continue
+    install -m 600 "${f}" "${HOME}/.ssh/$(basename "${f}")"
+    bashio::log.info "SSH: installed ~/.ssh/$(basename "${f}")"
+done
+
+# The HA config folder is always mounted at /homeassistant. config_access
+# also links it at /config, where Claude then starts. Off, Claude is told
+# to work through hab and the APIs instead — that steers Claude, it does
+# not lock the folder away.
+if bashio::config.true 'config_access'; then
+    if [ -L /config ] || [ ! -e /config ]; then
+        ln -sfn /homeassistant /config
+        bashio::log.info 'HA config folder linked at /config'
+    else
+        bashio::log.warning '/config exists and is not a link; config_access not applied'
+    fi
+elif [ -L /config ]; then
+    rm -f /config
+fi
+
+# App instructions, rebuilt from the options on every start. Claude Code
+# loads /etc/claude-code/CLAUDE.md (managed memory) next to the user's own
+# CLAUDE.md, which stays theirs to edit.
+mkdir -p /etc/claude-code
+{
+    echo '# Home Assistant'
+    echo
+    if bashio::config.true 'config_access'; then
+        echo '- `/config` is the Home Assistant configuration directory.'
+    else
+        echo '- Do not edit files in `/homeassistant` (the Home Assistant configuration folder). Make changes through `hab` and the APIs instead.'
+    fi
+    echo '- Use `hab` (Home Assistant Builder) to inspect and change entities, devices, areas, automations, scripts, dashboards and helpers. It is already authenticated; start with `hab guide`, and preview changes with `--plan`.'
+    echo '- Use the `ha` CLI for Supervisor tasks (`ha core check`, `ha core logs`, `ha apps …`); the HA REST API is at `http://supervisor/core/api/` with `Authorization: Bearer $SUPERVISOR_TOKEN`.'
+    if bashio::config.true 'restart_guard'; then
+        echo '- Restarting Home Assistant runs `ha core check` first and is blocked if the configuration is invalid — fix the reported errors, then restart again.'
+    fi
+} > /etc/claude-code/CLAUDE.md
+
+# Earlier versions seeded these instructions into the user's CLAUDE.md.
+# Remove an unedited copy so it cannot contradict the managed one.
+user_md="${CLAUDE_CONFIG_DIR}/CLAUDE.md"
+if [ -f "${user_md}" ]; then
+    case "$(sha256sum "${user_md}" | cut -d' ' -f1)" in
+        340d6cb60de1e9887d7273606c42532e49f165b2ccac88590bf7c8ab7a8e9c83 | \
+        0ffce9b503aba974bdde76b91b902075b2baf26867fecb53020effe356f725ed)
+            rm -f "${user_md}"
+            bashio::log.info "Removed the old default ${user_md}; app instructions now live in /etc/claude-code/CLAUDE.md"
+            ;;
+    esac
+fi
+
 # Optional long-lived token from `claude setup-token`. Written into the s6
 # container environment so every with-contenv service (ttyd → tmux → claude)
 # sees it. Never logged.
