@@ -94,11 +94,13 @@ RUN case "$(apk --print-arch)" in \
 # balloob/home-assistant-build-cli for managing entities, automations,
 # dashboards, helpers… through the HA API. Authenticates with
 # SUPERVISOR_TOKEN on its own. Pinned by the SHA-256 GitHub publishes.
+# The amd64 release is built natively with cgo and links glibc's libc.so.6
+# (arm64 is cross-compiled and static), so amd64 needs gcompat on musl.
 ARG HAB_VERSION=1.10.0
 ARG HAB_SHA256_AMD64=2d2c0529f61f1e6bd8759f1cdf0ece153c04f51b7eee0e6def28ad6bbac8bca0
 ARG HAB_SHA256_AARCH64=719c61fb3b0c7a8295a61113b4730f251b3c3fa5c833c5bab64e8865e3af5b90
 RUN case "$(apk --print-arch)" in \
-        x86_64)  arch=amd64; sha="${HAB_SHA256_AMD64}" ;; \
+        x86_64)  arch=amd64; sha="${HAB_SHA256_AMD64}"; apk add --no-cache gcompat ;; \
         aarch64) arch=arm64; sha="${HAB_SHA256_AARCH64}" ;; \
     esac \
     && curl -fsSL -o /usr/local/bin/hab "https://github.com/balloob/home-assistant-build-cli/releases/download/${HAB_VERSION}/hab-linux-${arch}" \
