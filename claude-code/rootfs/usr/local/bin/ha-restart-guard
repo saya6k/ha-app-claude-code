@@ -16,6 +16,7 @@ cmd=$(jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 
 sep='([[:space:]]+-[^[:space:]]+)*[[:space:]]+'  # whitespace, with optional --flags
 restart_re="(^|[^[:alnum:]_-])ha${sep}((core|homeassistant|home-assistant|ha)${sep}(restart|reboot|rebuild|rb|reinstall|update)|host${sep}(reboot|shutdown))([^[:alnum:]_-]|\$)"
+restart_re+="|(^|[^[:alnum:]_-])hab${sep}system${sep}restart([^[:alnum:]_-]|\$)"
 restart_re+='|supervisor/(core|homeassistant)/(restart|rebuild)'
 restart_re+='|services/homeassistant/restart'
 
