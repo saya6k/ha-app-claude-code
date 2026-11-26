@@ -26,6 +26,10 @@
 //    first jamo of each syllable reached the terminal. Send each jamo at
 //    once and replace it on every change with DEL + the new syllable, so
 //    what is on screen is always what the program drew, mid-line too.
+//    iOS instead sends a keydown per jamo (key "ㅌ", keyCode 0), which
+//    xterm.js would send as is, then deletes the syllable and inserts the
+//    recomposed text (deleteContentBackward + insertText "트"); drop the
+//    keydown and keypress and mirror the delete as DEL.
 //    Browsers that fire composition events (Chrome, Firefox) are left to
 //    xterm.js. Event analysis from xterm.js PR #5704.
 (function () {
@@ -112,12 +116,18 @@
         var composing = false; // standard composition events: xterm.js handles those
         var webkit = false;    // WebKit pattern seen: 229 keydowns are ours from now on
         var current = '';      // syllable being composed, already sent
+        var imeKey = false;    // last keydown was an iOS jamo key, not Backspace
+        var before = 0;        // textarea length before the current input
 
         // Capture on an ancestor runs before xterm.js's own textarea listeners.
         function ours(e) { return e.target === ta && !composing && !term.options.screenReaderMode; }
 
         root.addEventListener('compositionstart', function () { current = ''; composing = true; }, true);
         root.addEventListener('compositionend', function () { composing = false; }, true);
+
+        root.addEventListener('beforeinput', function (e) {
+            if (e.target === ta) before = ta.value.length;
+        }, true);
 
         root.addEventListener('input', function (e) {
             if (!ours(e)) return;
@@ -131,10 +141,11 @@
                 webkit = true;
                 term.input(e.data, true);
                 current = e.data.slice(-1);
-            } else if (e.inputType === 'deleteContentBackward' && current) {
-                // The IME removed the last jamo itself (no Backspace keydown
-                // reset `current` first), so xterm.js sent nothing.
-                term.input('\x7f', true);
+            } else if (e.inputType === 'deleteContentBackward' && (current || imeKey)) {
+                // The IME removed text itself (no Backspace keydown reset
+                // `current` first), so xterm.js sent nothing. iOS does this
+                // on every jamo, before inserting the recomposed text.
+                term.input(new Array(Math.max(before - ta.value.length, 1) + 1).join('\x7f'), true);
                 current = '';
             } else {
                 return;
@@ -150,7 +161,21 @@
                 if (webkit) e.stopImmediatePropagation();
                 return;
             }
+            imeKey = e.key.length === 1 && isHangul(e.key);
+            if (imeKey) {
+                // iOS: a jamo keydown (keyCode 0) that xterm.js would send
+                // as is; the input events after it carry the composed text.
+                webkit = true;
+                e.stopImmediatePropagation();
+                return;
+            }
             if (!MODIFIERS[e.key]) current = '';
+        }, true);
+
+        // Once its keydown is stopped, xterm.js would send the jamo from
+        // the keypress that iOS fires next.
+        root.addEventListener('keypress', function (e) {
+            if (ours(e) && e.key.length === 1 && isHangul(e.key)) e.stopImmediatePropagation();
         }, true);
     });
 
