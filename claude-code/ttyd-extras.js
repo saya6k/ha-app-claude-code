@@ -29,7 +29,8 @@
 //    iOS instead sends a keydown per jamo (key "ㅌ", keyCode 0), which
 //    xterm.js would send as is, then deletes the syllable and inserts the
 //    recomposed text (deleteContentBackward + insertText "트"); drop the
-//    keydown and keypress and mirror the delete as DEL.
+//    keydown and keypress and mirror the delete as DEL. Backspace inside a
+//    syllable is left to the IME the same way.
 //    Browsers that fire composition events (Chrome, Firefox) are left to
 //    xterm.js. Event analysis from xterm.js PR #5704.
 (function () {
@@ -116,7 +117,8 @@
         var composing = false; // standard composition events: xterm.js handles those
         var webkit = false;    // WebKit pattern seen: 229 keydowns are ours from now on
         var current = '';      // syllable being composed, already sent
-        var imeKey = false;    // last keydown was an iOS jamo key, not Backspace
+        var ios = false;       // iOS pattern seen: jamo keydowns with keyCode 0
+        var imeKey = false;    // the IME handles the last keydown (iOS)
         var before = 0;        // textarea length before the current input
 
         // Capture on an ancestor runs before xterm.js's own textarea listeners.
@@ -165,7 +167,15 @@
             if (imeKey) {
                 // iOS: a jamo keydown (keyCode 0) that xterm.js would send
                 // as is; the input events after it carry the composed text.
-                webkit = true;
+                webkit = ios = true;
+                e.stopImmediatePropagation();
+                return;
+            }
+            if (ios && current && e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                // Inside a syllable, let the IME take the jamo off (한 → 하):
+                // xterm.js would send DEL for the whole syllable and cancel
+                // the key, so the IME's text would drift from the terminal.
+                imeKey = true;
                 e.stopImmediatePropagation();
                 return;
             }
