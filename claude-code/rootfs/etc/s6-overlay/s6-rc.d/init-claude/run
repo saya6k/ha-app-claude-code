@@ -50,6 +50,28 @@ elif [ -L /config ]; then
     rm -f /config
 fi
 
+# Trust the folder Claude starts in (see ttyd/run). Claude Code never
+# records "Yes" for the home folder, and its trust dialog defaults to
+# "No, exit": without arrow keys (a phone) every start would end there.
+# /config is a link, so its target is trusted too.
+claude_json="${CLAUDE_CONFIG_DIR}/.claude.json"
+trusted=("${HOME}")
+if bashio::config.true 'config_access' && [ -d /config ]; then
+    trusted+=(/config "$(readlink -f /config)")
+fi
+if jq -e 'type == "object"' "${claude_json}" >/dev/null 2>&1; then
+    if jq --args 'reduce $ARGS.positional[] as $dir (.; .projects[$dir].hasTrustDialogAccepted = true)' \
+            "${trusted[@]}" < "${claude_json}" > "${claude_json}.app-tmp" \
+        && ! cmp -s "${claude_json}" "${claude_json}.app-tmp"; then
+        mv "${claude_json}.app-tmp" "${claude_json}"
+        bashio::log.info "Trusted ${trusted[*]} in ${claude_json}"
+    else
+        rm -f "${claude_json}.app-tmp"
+    fi
+else
+    bashio::log.warning "${claude_json} is not a valid JSON object; Claude will ask whether to trust ${trusted[0]}"
+fi
+
 # App instructions, rebuilt from the options on every start. Claude Code
 # loads /etc/claude-code/CLAUDE.md (managed memory) next to the user's own
 # CLAUDE.md, which stays theirs to edit.
