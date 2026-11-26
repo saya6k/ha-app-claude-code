@@ -33,6 +33,10 @@
 //    syllable is left to the IME the same way.
 //    Browsers that fire composition events (Chrome, Firefox) are left to
 //    xterm.js. Event analysis from xterm.js PR #5704.
+//
+// 4. Shift+Enter. xterm.js sends a plain CR for it, so Claude Code could
+//    not tell it from Enter; send ESC CR (Option+Enter) instead, which
+//    Claude Code reads as a newline.
 (function () {
     'use strict';
 
@@ -186,6 +190,21 @@
         // the keypress that iOS fires next.
         root.addEventListener('keypress', function (e) {
             if (ours(e) && e.key.length === 1 && isHangul(e.key)) e.stopImmediatePropagation();
+        }, true);
+    });
+
+    withTerm(function (term) {
+        var root = term.element;
+        if (!root) return;
+        root.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' || !e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            // Chrome repeats the Enter keydown after a Hangul composition
+            // ends, before xterm.js sends the syllable from its own 0 ms
+            // timeout; queue behind it so the syllable is not pushed to
+            // the next line.
+            setTimeout(function () { term.input('\x1b\r', true); }, 0);
         }, true);
     });
 
