@@ -5,7 +5,7 @@
 # an @font-face in <head> for the bundled Symbols Nerd Font (served by nginx
 # at fonts/, relative so it survives the ingress path prefix), and
 # ttyd-extras.js inlined before </body> (font redraw, OSC 52 clipboard,
-# Korean IME on WebKit).
+# Korean IME on WebKit, Shift+Enter).
 # Everything else is ttyd's stock page.
 # Approach adapted from heytcass/claude-terminal's build-ttyd-index.sh.
 #
