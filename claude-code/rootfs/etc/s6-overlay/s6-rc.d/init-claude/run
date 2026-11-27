@@ -215,3 +215,25 @@ if bashio::config.has_value 'claude_code_version'; then
 else
     claude-select
 fi
+
+# Extra tools (e.g. what MCP servers launch: npx, uvx, …). The container is
+# recreated on every start, so they are installed again each time. Runs
+# last so init_commands can use claude itself (`claude mcp add …`). Any
+# failure stops the app: an MCP server would otherwise just fail later.
+# s6 waits on this script forever, so a hanging command gets a time limit.
+if bashio::config.has_value 'packages'; then
+    mapfile -t packages < <(bashio::config 'packages')
+    bashio::log.info "Installing packages: ${packages[*]}"
+    apk add --no-cache "${packages[@]}" \
+        || bashio::exit.nok "Failed to install packages: ${packages[*]}"
+fi
+if bashio::config.has_value 'init_commands'; then
+    # mapfile, not `while read`: bashio prints no trailing newline, so read
+    # would drop the last command.
+    mapfile -t commands < <(bashio::config 'init_commands')
+    for cmd in "${commands[@]}"; do
+        bashio::log.info "Running init command: ${cmd}"
+        (cd "${HOME}" && timeout 600 bash -c "${cmd}" < /dev/null) \
+            || bashio::exit.nok "Init command failed or ran over 10 minutes: ${cmd}"
+    done
+fi
